@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(claude-api)",
+      "Bash(deno --version)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(node -p \"require\\('./node_modules/@anthropic-ai/sdk/package.json'\\).version\")",
+      "Bash(npm view *)",
+      "Bash(node -p \"'sdk: '+require\\('./node_modules/@anthropic-ai/sdk/package.json'\\).version\")",
+      "Bash(node -p \"'atproto: '+require\\('./node_modules/@atproto/api/package.json'\\).version\")",
+      "Bash(echo \"=== exit: $? ===\")",
+      "Bash(BOT_CONTACT=\"probe@example.com\" npx tsx src/probe.ts)",
+      "Bash(echo \"=== typecheck exit: $? ===\")",
+      "Bash(curl -s -A 'probe/0.1 \\(probe@example.com\\)' https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Rachael_Finch%2C_2012.jpg/330px-Rachael_Finch%2C_2012.jpg)",
+      "Bash(node *)",
+      "WebFetch(domain:w.wiki)",
+      "WebFetch(domain:wikitech.wikimedia.org)",
+      "Bash(BOT_CONTACT=\"probe@example.com\" npx tsx /tmp/dbg.ts)",
+      "Bash(BOT_CONTACT=\"probe@example.com\" npx tsx src/dbg.ts)",
+      "Bash(rm -f src/dbg.ts /tmp/dbg.ts)",
+      "Bash(sed -i 's/, thumbnailCandidates }/ }/; /--- URL construction ---/,/^}$/d' src/probe.ts)"
+    ]
+  }
+}
