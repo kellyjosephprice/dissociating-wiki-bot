@@ -41,6 +41,27 @@ npm run post   # actually posts
 Run `npm run dry` a bunch of times first to see whether the juxtapositions are
 landing before it touches your account.
 
+### `--order`
+
+Controls which trending topic gets picked.
+
+| Value                | Behaviour                                                              |
+| -------------------- | ---------------------------------------------------------------------- |
+| `random` _(default)_ | Shuffles both the topics and the extracted candidates within each topic |
+| `trending`           | Keeps Bluesky's ranking and Claude's candidate ranking                  |
+
+```sh
+npm run dry -- --order trending
+npm run post -- --order=random
+```
+
+Shuffling the candidates has a cost worth knowing about. Claude returns them
+most-likely-first, and we take the first one that resolves — so with `random` a
+topic can land on a more tangential article than `trending` would pick
+(`"AOC misquoted…"` might resolve to something vaguer than
+`Alexandria Ocasio-Cortez`). That's the trade for variety. Use `trending` if you
+want the most-apt article each time.
+
 ## How it works
 
 Five steps, each an exported function in `src/main.ts` so you can call them
@@ -50,7 +71,7 @@ individually while iterating:
 | ---- | ----------------------- | --------------------------------------------- |
 | 1    | `fetchTrendingTopics()` | Bluesky's trending endpoint                   |
 | 2    | `extractEntities()`     | Claude normalizes headlines into entity names |
-| 3    | `resolveFirstArticle()` | Wikipedia decides which ones are real         |
+| 3    | `resolveFirstArticle()` | Wikipedia decides which ones are real; honours `--order` |
 | 4    | `pickImageArticle()`    | Random article with a usable lead image       |
 | 5    | `postJuxtaposition()`   | Upload blob, post the card                    |
 

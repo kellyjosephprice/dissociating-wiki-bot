@@ -29,6 +29,32 @@ const DRY_RUN = process.argv.includes("--dry-run");
 /** So the exported steps can be imported without running the pipeline. */
 const IS_ENTRYPOINT = process.argv[1] === fileURLToPath(import.meta.url);
 
+/**
+ * Which trending topic to reach for first.
+ *
+ * `random` (the default) shuffles, so repeated runs don't keep landing on
+ * whatever is at the top of the trending list. `trending` preserves Bluesky's
+ * ranking and takes the highest-ranked topic that resolves to an article.
+ */
+export type TopicOrder = "random" | "trending";
+
+const TOPIC_ORDERS: readonly TopicOrder[] = ["random", "trending"];
+
+function parseOrderFlag(argv: string[]): TopicOrder {
+  const index = argv.findIndex((a) => a === "--order" || a.startsWith("--order="));
+  if (index === -1) return "random";
+
+  const arg = argv[index]!;
+  const value = arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : argv[index + 1];
+
+  if (!value || !TOPIC_ORDERS.includes(value as TopicOrder)) {
+    throw new Error(
+      `--order expects one of: ${TOPIC_ORDERS.join(", ")} (got ${value ?? "nothing"}).`,
+    );
+  }
+  return value as TopicOrder;
+}
+
 // ------------------------------------------------------------------- constants
 
 const BSKY_PUBLIC_API = "https://public.api.bsky.app";
@@ -243,15 +269,43 @@ export async function lookupArticle(title: string): Promise<Article | null> {
   };
 }
 
+/** Fisher-Yates, on a copy — the caller's array is left alone. */
+function shuffled<T>(items: readonly T[]): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j]!, copy[i]!];
+  }
+  return copy;
+}
+
 /**
- * Walks the candidate list until something resolves. Returns the first article
- * that exists, along with the trending topic that produced it.
+ * Walks the topics until one resolves to a real article. Returns the first hit,
+ * along with the trending topic that produced it.
+ *
+ * `order: "random"` (the default) shuffles at both levels: the topics, so
+ * consecutive runs don't keep posting about whatever is top of the trending
+ * list, and the extracted candidates within each topic.
+ *
+ * Note the second one has a cost. Claude returns candidates most-likely-first
+ * ("Alexandria Ocasio-Cortez" ahead of vaguer guesses), and since we take the
+ * first candidate that resolves, shuffling means we take a random *resolving*
+ * candidate rather than the best one — so a topic can land on a more tangential
+ * article than it would otherwise. That's the trade for more variety.
+ *
+ * `order: "trending"` preserves both orderings.
  */
 export async function resolveFirstArticle(
   entities: EntityCandidates[],
+  order: TopicOrder = "random",
 ): Promise<{ topic: string; article: Article } | null> {
-  for (const entity of entities) {
-    for (const candidate of entity.candidates) {
+  const orderedEntities = order === "random" ? shuffled(entities) : entities;
+
+  for (const entity of orderedEntities) {
+    const candidates =
+      order === "random" ? shuffled(entity.candidates) : entity.candidates;
+
+    for (const candidate of candidates) {
       const article = await lookupArticle(candidate);
       if (article) return { topic: entity.topic, article };
     }
@@ -432,6 +486,8 @@ export async function postJuxtaposition(
 // ------------------------------------------------------------------------ main
 
 async function main(): Promise<void> {
+  const order = parseOrderFlag(process.argv);
+
   console.log("Fetching trending topics…");
   const topics = await fetchTrendingTopics();
   console.log(`  ${topics.length} topics: ${topics.slice(0, 8).join(", ")}…`);
@@ -442,8 +498,8 @@ async function main(): Promise<void> {
     `  ${entities.length} topics look like they have a subject behind them`,
   );
 
-  console.log("Resolving against Wikipedia…");
-  const resolved = await resolveFirstArticle(entities);
+  console.log(`Resolving against Wikipedia (${order} order)…`);
+  const resolved = await resolveFirstArticle(entities, order);
   if (!resolved) {
     throw new Error(
       "No trending topic resolved to a Wikipedia article this run.",

@@ -19,7 +19,11 @@
       "Bash(BOT_CONTACT=\"probe@example.com\" npx tsx /tmp/dbg.ts)",
       "Bash(BOT_CONTACT=\"probe@example.com\" npx tsx src/dbg.ts)",
       "Bash(rm -f src/dbg.ts /tmp/dbg.ts)",
-      "Bash(sed -i 's/, thumbnailCandidates }/ }/; /--- URL construction ---/,/^}$/d' src/probe.ts)"
+      "Bash(sed -i 's/, thumbnailCandidates }/ }/; /--- URL construction ---/,/^}$/d' src/probe.ts)",
+      "Bash(BOT_CONTACT=x npx tsx src/main.ts --dry-run --order bogus)",
+      "Bash(BOT_CONTACT=x npx tsx src/main.ts --dry-run --order)",
+      "Bash(BOT_CONTACT=x npx tsx src/main.ts --dry-run --order=trending)",
+      "Bash(BOT_CONTACT=x npx tsx src/main.ts --dry-run --order random)"
     ]
   }
 }
