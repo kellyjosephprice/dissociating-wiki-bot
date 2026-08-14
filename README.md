@@ -1,4 +1,4 @@
-# wikipedia-juxtaposition-bot
+# Dissociating Wikipedia Bot
 
 Posts a Bluesky link card pointing at a Wikipedia article about something
 trending, with the preview image taken from a completely unrelated article.
@@ -46,13 +46,13 @@ landing before it touches your account.
 Five steps, each an exported function in `src/main.ts` so you can call them
 individually while iterating:
 
-| Step | Function | Notes |
-|---|---|---|
-| 1 | `fetchTrendingTopics()` | Bluesky's trending endpoint |
-| 2 | `extractEntities()` | Claude normalizes headlines into entity names |
-| 3 | `resolveFirstArticle()` | Wikipedia decides which ones are real |
-| 4 | `pickImageArticle()` | Random article with a usable lead image |
-| 5 | `postJuxtaposition()` | Upload blob, post the card |
+| Step | Function                | Notes                                         |
+| ---- | ----------------------- | --------------------------------------------- |
+| 1    | `fetchTrendingTopics()` | Bluesky's trending endpoint                   |
+| 2    | `extractEntities()`     | Claude normalizes headlines into entity names |
+| 3    | `resolveFirstArticle()` | Wikipedia decides which ones are real         |
+| 4    | `pickImageArticle()`    | Random article with a usable lead image       |
+| 5    | `postJuxtaposition()`   | Upload blob, post the card                    |
 
 Step 2 is load-bearing, not a nicety. Trending topics arrive as headline
 sentences — `"Trump spends $900M on White House"`, not `"Trump"` — and none of
@@ -71,7 +71,7 @@ is the single place to fix when it breaks.
 **Wikipedia is two hosts with two conflicting policies.**
 This one cost real debugging time:
 
-- `en.wikipedia.org/api/rest_v1` (the API) *requires* a descriptive User-Agent
+- `en.wikipedia.org/api/rest_v1` (the API) _requires_ a descriptive User-Agent
   with contact info. Generic or missing UAs get rate-limited.
 - `upload.wikimedia.org` (the media CDN) **403s any request carrying an
   identifying User-Agent**, including the exact one the API demands.
@@ -95,7 +95,7 @@ API-provided URL is the only one guaranteed to be there. This also keeps us to
 one CDN request per run, well inside the rate limits.
 
 **Rate limits are real.** The CDN starts returning 429 under sustained load.
-`MediaAccessError` is thrown for both 403 and 429 and is deliberately *not*
+`MediaAccessError` is thrown for both 403 and 429 and is deliberately _not_
 retried, because retrying is what gets clients blocked.
 
 ## Porting to Supabase
@@ -111,8 +111,8 @@ Check the Deno default User-Agent against the media CDN before you rely on it.
 
 ## Ideas
 
-- Store previous trending topics so the image comes from *the last thing looked
-  up*, which is closer to the actual bug.
+- Store previous trending topics so the image comes from _the last thing looked
+  up_, which is closer to the actual bug.
 - Random articles are mostly obscure — a village, a beetle, a footballer.
   Sourcing the image from the most-read list would land the joke more often;
   `pickImageArticle` is the only function that would change.

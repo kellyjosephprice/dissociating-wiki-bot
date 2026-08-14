@@ -45,7 +45,7 @@ const RANDOM_ARTICLE_ATTEMPTS = 15;
  * User-Agent with contact info. Generic or missing UAs get rate-limited here.
  */
 function wikiApiHeaders(): HeadersInit {
-  const ua = `wikipedia-juxtaposition-bot/0.1 (${env("BOT_CONTACT")})`;
+  const ua = `dissociating-wikipedia-bot/0.1 (${env("BOT_CONTACT")})`;
   return { "User-Agent": ua, "Api-User-Agent": ua };
 }
 
@@ -320,7 +320,9 @@ export async function pickImageArticle(attempts = 5): Promise<ResolvedImage> {
   for (let attempt = 0; attempt < attempts; attempt++) {
     const article = await randomArticleWithImage();
     try {
-      const { bytes, mimeType } = await fetchThumbnailBytes(article.thumbnailUrl!);
+      const { bytes, mimeType } = await fetchThumbnailBytes(
+        article.thumbnailUrl!,
+      );
       return { article, bytes, mimeType };
     } catch (error) {
       if (error instanceof MediaAccessError) throw error;
@@ -406,7 +408,9 @@ export async function postJuxtaposition(
     password: env("BLUESKY_APP_PASSWORD"),
   });
 
-  const upload = await agent.uploadBlob(image.bytes, { encoding: image.mimeType });
+  const upload = await agent.uploadBlob(image.bytes, {
+    encoding: image.mimeType,
+  });
 
   const result = await agent.post({
     text: truncate(linkArticle.title, 300),
@@ -434,12 +438,16 @@ async function main(): Promise<void> {
 
   console.log("Normalizing topics into entity candidates…");
   const entities = await extractEntities(topics);
-  console.log(`  ${entities.length} topics look like they have a subject behind them`);
+  console.log(
+    `  ${entities.length} topics look like they have a subject behind them`,
+  );
 
   console.log("Resolving against Wikipedia…");
   const resolved = await resolveFirstArticle(entities);
   if (!resolved) {
-    throw new Error("No trending topic resolved to a Wikipedia article this run.");
+    throw new Error(
+      "No trending topic resolved to a Wikipedia article this run.",
+    );
   }
   console.log(`  "${resolved.topic}" -> ${resolved.article.title}`);
 
