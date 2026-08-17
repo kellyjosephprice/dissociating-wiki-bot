@@ -1,8 +1,8 @@
-# Dissociating Wikipedia Bot
+# ![Blurry W](./w-blurry.png) Dissociating Wikipedia Bot
 
 A bot to post Wikipedia links with mistaken preview iamges.
 
-Inspired by a bug on my phone where Wikipedia app loads the preview image from last article I read.
+Inspired by a bug on my phone where the Wikipedia app loads the preview image from last article I read.
 
 ## Setup
 

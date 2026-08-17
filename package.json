@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dry": "tsx --env-file=.env src/main.ts --dry-run",
-    "post": "tsx --env-file=.env src/main.ts",
+    "dry": "tsx --env-file=.env src/main.ts",
+    "post": "tsx --env-file=.env src/main.ts --post",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

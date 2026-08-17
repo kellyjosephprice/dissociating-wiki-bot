@@ -25,7 +25,11 @@
       "Bash(BOT_CONTACT=x npx tsx src/main.ts --dry-run --order=trending)",
       "Bash(BOT_CONTACT=x npx tsx src/main.ts --dry-run --order random)",
       "Bash(node -e 'let d=\"\";process.stdin.on\\(\"data\",c=>d+=c\\).on\\(\"end\",\\(\\)=>{ *)",
-      "Bash(BOT_CONTACT=\"probe@example.com\" npx tsx src/check.ts)"
+      "Bash(BOT_CONTACT=\"probe@example.com\" npx tsx src/check.ts)",
+      "Bash(sed -n '/export async function postJuxtaposition/,/^}/p' src/main.ts)",
+      "Bash(node -p \"JSON.stringify\\(require\\('./package.json'\\).scripts,null,2\\)\")",
+      "Bash(BOT_CONTACT=x npx tsx src/main.ts)",
+      "Bash(BOT_CONTACT=x npx tsx src/main.ts --dryrun)"
     ]
   }
 }

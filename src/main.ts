@@ -24,8 +24,6 @@ function env(name: string): string {
   return value;
 }
 
-const DRY_RUN = process.argv.includes("--dry-run");
-
 /** So the exported steps can be imported without running the pipeline. */
 const IS_ENTRYPOINT = process.argv[1] === fileURLToPath(import.meta.url);
 
@@ -40,19 +38,61 @@ export type TopicOrder = "random" | "trending";
 
 const TOPIC_ORDERS: readonly TopicOrder[] = ["random", "trending"];
 
-function parseOrderFlag(argv: string[]): TopicOrder {
-  const index = argv.findIndex((a) => a === "--order" || a.startsWith("--order="));
-  if (index === -1) return "random";
+export interface CliOptions {
+  /** Only true when --post is passed explicitly. */
+  post: boolean;
+  order: TopicOrder;
+}
 
-  const arg = argv[index]!;
-  const value = arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : argv[index + 1];
+const USAGE = `Usage: main.ts [--post] [--order random|trending]
 
-  if (!value || !TOPIC_ORDERS.includes(value as TopicOrder)) {
-    throw new Error(
-      `--order expects one of: ${TOPIC_ORDERS.join(", ")} (got ${value ?? "nothing"}).`,
-    );
+  --post              Actually publish. Without it, nothing is posted.
+  --dry-run, --dry    Explicitly force a dry run (the default anyway).
+  --order <mode>      random (default) | trending`;
+
+/**
+ * Parses argv, failing closed.
+ *
+ * Publishing is opt-in: it happens only when --post is passed. Anything this
+ * parser doesn't recognize is a hard error rather than a silently ignored
+ * argument. Both properties exist because the earlier design had it the other
+ * way around — posting was the default and safety needed an exact `--dry-run`
+ * match — so a near-miss like `--dry` published a real post. A safety flag has
+ * to fail closed; a typo must never be the thing that publishes.
+ *
+ * `--dry`/`--dry-run` wins over `--post` wherever it appears, so the cautious
+ * reading of a contradictory command line is the one that takes effect.
+ */
+export function parseArgs(argv: string[]): CliOptions {
+  const args = argv.slice(2);
+  let post = false;
+  let forceDry = false;
+  let order: TopicOrder = "random";
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+
+    if (arg === "--post") {
+      post = true;
+    } else if (arg === "--dry-run" || arg === "--dry") {
+      forceDry = true;
+    } else if (arg === "--order" || arg.startsWith("--order=")) {
+      const value = arg.includes("=")
+        ? arg.slice(arg.indexOf("=") + 1)
+        : args[++i];
+
+      if (!value || !TOPIC_ORDERS.includes(value as TopicOrder)) {
+        throw new Error(
+          `--order expects one of: ${TOPIC_ORDERS.join(", ")} (got ${value ?? "nothing"}).\n\n${USAGE}`,
+        );
+      }
+      order = value as TopicOrder;
+    } else {
+      throw new Error(`Unknown argument: ${arg}\n\n${USAGE}`);
+    }
   }
-  return value as TopicOrder;
+
+  return { post: post && !forceDry, order };
 }
 
 // ------------------------------------------------------------------- constants
@@ -348,11 +388,15 @@ export async function fetchTop25Links(): Promise<string[]> {
 
   const body = (await res.json()) as {
     error?: { info?: string };
-    parse?: { links?: Array<{ ns?: number; title?: string; exists?: boolean }> };
+    parse?: {
+      links?: Array<{ ns?: number; title?: string; exists?: boolean }>;
+    };
   };
 
   if (body.error) {
-    throw new Error(`Top 25 Report lookup failed: ${body.error.info ?? "unknown"}`);
+    throw new Error(
+      `Top 25 Report lookup failed: ${body.error.info ?? "unknown"}`,
+    );
   }
 
   const titles = (body.parse?.links ?? [])
@@ -360,7 +404,9 @@ export async function fetchTop25Links(): Promise<string[]> {
     .map((l) => l.title!);
 
   if (titles.length === 0) {
-    throw new Error(`Top 25 Report returned no mainspace links — page may have moved.`);
+    throw new Error(
+      `Top 25 Report returned no mainspace links — page may have moved.`,
+    );
   }
   return [...new Set(titles)];
 }
@@ -413,7 +459,9 @@ export interface ResolvedImage {
  * MediaAccessError, because a 403/429 from the CDN won't be fixed by trying a
  * different article and retrying is what gets clients blocked.
  */
-async function tryArticleImage(article: Article): Promise<ResolvedImage | null> {
+async function tryArticleImage(
+  article: Article,
+): Promise<ResolvedImage | null> {
   if (!article.thumbnailUrl) return null;
   try {
     const { bytes, mimeType } = await fetchThumbnailBytes(article.thumbnailUrl);
@@ -441,7 +489,8 @@ export async function pickImageArticle(
 ): Promise<ResolvedImage> {
   const { exclude, examine = 20 } = options;
   const isExcluded = (a: Article) =>
-    exclude !== undefined && (a.url === exclude.url || a.title === exclude.title);
+    exclude !== undefined &&
+    (a.url === exclude.url || a.title === exclude.title);
 
   let pool: string[] | null = null;
   try {
@@ -540,6 +589,47 @@ function truncate(text: string, max: number): string {
   return `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
+/** Minimal shape of a Bluesky richtext link facet. */
+export interface LinkFacet {
+  index: { byteStart: number; byteEnd: number };
+  features: Array<{ $type: "app.bsky.richtext.facet#link"; uri: string }>;
+}
+
+/**
+ * Body text for the post: the *linked* article's title, hyperlinked to the
+ * *image* article. So the card and the body are dissociated the same way —
+ * everything reads as being about one article while pointing at another.
+ *
+ * Facet offsets are UTF-8 **byte** offsets, not JS string indices. Titles like
+ * "Markéta Irglová" contain multi-byte characters, so using `text.length` here
+ * would produce a facet that stops short and renders a partially-linked title.
+ */
+export function buildPostText(
+  linkArticle: Article,
+  imageArticle: Article,
+): { text: string; facets: LinkFacet[] } {
+  const text = truncate(linkArticle.title, 300);
+  if (text.length === 0) return { text, facets: [] };
+
+  return {
+    text,
+    facets: [
+      {
+        index: {
+          byteStart: 0,
+          byteEnd: new TextEncoder().encode(text).byteLength,
+        },
+        features: [
+          {
+            $type: "app.bsky.richtext.facet#link",
+            uri: imageArticle.url,
+          },
+        ],
+      },
+    ],
+  };
+}
+
 export async function postJuxtaposition(
   linkArticle: Article,
   image: ResolvedImage,
@@ -554,8 +644,11 @@ export async function postJuxtaposition(
     encoding: image.mimeType,
   });
 
+  const { text, facets } = buildPostText(linkArticle, image.article);
+
   const result = await agent.post({
-    text: truncate(linkArticle.title, 300),
+    text,
+    facets,
     createdAt: new Date().toISOString(),
     embed: {
       $type: "app.bsky.embed.external",
@@ -574,7 +667,7 @@ export async function postJuxtaposition(
 // ------------------------------------------------------------------------ main
 
 async function main(): Promise<void> {
-  const order = parseOrderFlag(process.argv);
+  const { post, order } = parseArgs(process.argv);
 
   console.log("Fetching trending topics…");
   const topics = await fetchTrendingTopics();
@@ -607,11 +700,15 @@ async function main(): Promise<void> {
   console.log(`                   ${resolved.article.url}`);
   console.log(`  preview image  : ${image.article.title}`);
   console.log(`                   ${image.article.url}`);
+
+  const preview = buildPostText(resolved.article, image.article);
+  console.log(`  body text      : "${preview.text}"`);
+  console.log(`  body links to  : ${preview.facets[0]?.features[0]?.uri ?? "(none)"}`);
   console.log("──────────────────────────────────────────────");
   console.log("");
 
-  if (DRY_RUN) {
-    console.log("Dry run — nothing posted. Drop --dry-run to post for real.");
+  if (!post) {
+    console.log("Dry run — nothing posted. Pass --post to publish.");
     return;
   }
 

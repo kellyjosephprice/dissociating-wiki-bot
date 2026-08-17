@@ -1,7 +1,11 @@
 Hi Claude!
 
-Ok, can we do a round of changes?
+A few smaller things:
 
-In retrospect, I think your idea about using the wikipedia's top 25 popular articles is a decent approximation of what I might have been reading previously. So, instead of pulling a random wikipedia article, could you pull one of the links from the Top 25 Report, including the actual Top 25 articles, as well as any links in Notes/about section? I'd like to approximate someone reading wikipedia and following interesting links, but I'm not sure how to do that. So using the summary seems like a decent plan.
+1. I updated the post request to keep the text body empty.
+
+2. One problem I noticed is that `--dry` actually posts! It should definitely not. Luckily, the one it did post was pretty good: https://bsky.app/profile/dissociating-wiki.bsky.social/post/3mtcdsncvr72m
+
+3. Feature request: Could you add back the body text, but let's make it a link. The link text should be the title of the wikipedia article, but the url of the link should be the url for the preview image article.
 
 Thanks!
