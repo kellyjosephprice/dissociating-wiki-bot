@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="A Blurry W" src="./dissociating-wiki-logo.png" class="logo" />
+  <img alt="A Blurry W" src="./dissociating-wiki-logo-small.png" class="logo" />
 </p>
 
 # Dissociating Wikipedia Bot
