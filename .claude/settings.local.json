@@ -23,7 +23,9 @@
       "Bash(BOT_CONTACT=x npx tsx src/main.ts --dry-run --order bogus)",
       "Bash(BOT_CONTACT=x npx tsx src/main.ts --dry-run --order)",
       "Bash(BOT_CONTACT=x npx tsx src/main.ts --dry-run --order=trending)",
-      "Bash(BOT_CONTACT=x npx tsx src/main.ts --dry-run --order random)"
+      "Bash(BOT_CONTACT=x npx tsx src/main.ts --dry-run --order random)",
+      "Bash(node -e 'let d=\"\";process.stdin.on\\(\"data\",c=>d+=c\\).on\\(\"end\",\\(\\)=>{ *)",
+      "Bash(BOT_CONTACT=\"probe@example.com\" npx tsx src/check.ts)"
     ]
   }
 }

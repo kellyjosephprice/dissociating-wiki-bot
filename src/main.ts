@@ -60,6 +60,14 @@ function parseOrderFlag(argv: string[]): TopicOrder {
 const BSKY_PUBLIC_API = "https://public.api.bsky.app";
 const BSKY_SERVICE = "https://bsky.social";
 const WIKI_REST = "https://en.wikipedia.org/api/rest_v1";
+const WIKI_ACTION = "https://en.wikipedia.org/w/api.php";
+
+/**
+ * Weekly roundup of the most-viewed articles. Each entry has a Notes blurb that
+ * links out to related articles, so the page's mainspace links are roughly
+ * "what people were reading last week, plus what they'd click through to".
+ */
+const TOP25_PAGE = "Wikipedia:Top 25 Report";
 
 /** Bluesky rejects image blobs over ~1MB. Leave headroom. */
 const MAX_BLOB_BYTES = 950_000;
@@ -313,15 +321,53 @@ export async function resolveFirstArticle(
   return null;
 }
 
-// --------------------------------------------------- 4. random image article
+// ---------------------------------------------------- 4. image article
 
 /**
- * Pulls random articles until one has a lead image.
+ * Every mainspace article linked from the current Top 25 Report.
  *
- * Most random articles are obscure and many have no image at all, hence the
- * retry loop. Swapping this for the "most-read yesterday" feed is the obvious
- * upgrade when you want the juxtapositions to land more often — it's a
- * different URL and the same return shape.
+ * That's the 25 most-viewed articles of the week *plus* everything linked from
+ * their Notes blurbs — roughly "what people were reading, and what they'd click
+ * through to from there". Much closer to the bug being imitated than a random
+ * article, and far better juxtaposition material: recognizable subjects rather
+ * than a Romanian footballer or a beetle species.
+ *
+ * Uses the Action API rather than the REST API because we want the links of the
+ * *rendered* page (the report transcludes the current week), which `prop=links`
+ * gives us directly.
+ */
+export async function fetchTop25Links(): Promise<string[]> {
+  const url =
+    `${WIKI_ACTION}?action=parse&page=${encodeURIComponent(TOP25_PAGE)}` +
+    `&prop=links&format=json&formatversion=2`;
+
+  const res = await fetch(url, { headers: wikiApiHeaders() });
+  if (!res.ok) {
+    throw new Error(`Top 25 Report lookup returned ${res.status}.`);
+  }
+
+  const body = (await res.json()) as {
+    error?: { info?: string };
+    parse?: { links?: Array<{ ns?: number; title?: string; exists?: boolean }> };
+  };
+
+  if (body.error) {
+    throw new Error(`Top 25 Report lookup failed: ${body.error.info ?? "unknown"}`);
+  }
+
+  const titles = (body.parse?.links ?? [])
+    .filter((l) => l.ns === 0 && l.exists && typeof l.title === "string")
+    .map((l) => l.title!);
+
+  if (titles.length === 0) {
+    throw new Error(`Top 25 Report returned no mainspace links — page may have moved.`);
+  }
+  return [...new Set(titles)];
+}
+
+/**
+ * Pulls random articles until one has a lead image. Kept as the fallback for
+ * when the Top 25 Report can't be fetched.
  */
 export async function randomArticleWithImage(): Promise<Article> {
   for (let attempt = 0; attempt < RANDOM_ARTICLE_ATTEMPTS; attempt++) {
@@ -362,33 +408,75 @@ export interface ResolvedImage {
 }
 
 /**
- * Picks a random article whose lead image we can actually download at a usable
- * size. Some articles advertise a lead image that turns out to be a multi-MB
- * original with no thumbnail rendition available; those get skipped rather than
- * failing the run. A 403 from the CDN is not retried — that's a config problem,
- * and hammering it is exactly what the robot policy warns about.
+ * Downloads an article's lead image, or returns null if this article isn't
+ * usable (no image, or an image we can't fetch at a sane size). Rethrows
+ * MediaAccessError, because a 403/429 from the CDN won't be fixed by trying a
+ * different article and retrying is what gets clients blocked.
  */
-export async function pickImageArticle(attempts = 5): Promise<ResolvedImage> {
-  let lastError: unknown;
+async function tryArticleImage(article: Article): Promise<ResolvedImage | null> {
+  if (!article.thumbnailUrl) return null;
+  try {
+    const { bytes, mimeType } = await fetchThumbnailBytes(article.thumbnailUrl);
+    return { article, bytes, mimeType };
+  } catch (error) {
+    if (error instanceof MediaAccessError) throw error;
+    return null;
+  }
+}
 
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    const article = await randomArticleWithImage();
-    try {
-      const { bytes, mimeType } = await fetchThumbnailBytes(
-        article.thumbnailUrl!,
-      );
-      return { article, bytes, mimeType };
-    } catch (error) {
-      if (error instanceof MediaAccessError) throw error;
-      lastError = error;
+/**
+ * Picks the article whose lead image becomes the preview.
+ *
+ * Draws from the Top 25 Report (see `fetchTop25Links`), shuffled, so the image
+ * is something a person plausibly read this week rather than an arbitrary
+ * article. Falls back to random articles if the report can't be fetched — the
+ * bot keeps working, and `main` says which source it used.
+ *
+ * `exclude` matters more than it looks: trending-on-Bluesky and popular-on-
+ * Wikipedia overlap heavily, so without it the link article and the image
+ * article are sometimes the same page and there's no joke at all.
+ */
+export async function pickImageArticle(
+  options: { exclude?: Article; examine?: number } = {},
+): Promise<ResolvedImage> {
+  const { exclude, examine = 20 } = options;
+  const isExcluded = (a: Article) =>
+    exclude !== undefined && (a.url === exclude.url || a.title === exclude.title);
+
+  let pool: string[] | null = null;
+  try {
+    pool = shuffled(await fetchTop25Links());
+  } catch (error) {
+    console.warn(
+      `  ! Top 25 Report unavailable (${
+        error instanceof Error ? error.message : error
+      }); falling back to random articles.`,
+    );
+  }
+
+  if (pool) {
+    for (const title of pool.slice(0, examine)) {
+      if (exclude && title === exclude.title) continue;
+
+      const article = await lookupArticle(title);
+      if (!article || isExcluded(article)) continue;
+
+      const resolved = await tryArticleImage(article);
+      if (resolved) return resolved;
     }
   }
 
-  throw new Error(
-    `No usable lead image after ${attempts} articles. Last error: ${
-      lastError instanceof Error ? lastError.message : lastError
-    }`,
-  );
+  // Fallback: random articles, either because the report was unreachable or
+  // because nothing in the sampled slice had a usable image.
+  for (let attempt = 0; attempt < RANDOM_ARTICLE_ATTEMPTS; attempt++) {
+    const article = await randomArticleWithImage();
+    if (isExcluded(article)) continue;
+
+    const resolved = await tryArticleImage(article);
+    if (resolved) return resolved;
+  }
+
+  throw new Error("Could not find any article with a usable lead image.");
 }
 
 // -------------------------------------------------------------- 5. post to bsky
@@ -507,8 +595,8 @@ async function main(): Promise<void> {
   }
   console.log(`  "${resolved.topic}" -> ${resolved.article.title}`);
 
-  console.log("Finding a random article with a usable lead image…");
-  const image = await pickImageArticle();
+  console.log("Picking a preview image from the Top 25 Report…");
+  const image = await pickImageArticle({ exclude: resolved.article });
   const kb = Math.round(image.bytes.byteLength / 1024);
   console.log(`  ${image.article.title} (${image.mimeType}, ${kb}kb)`);
 

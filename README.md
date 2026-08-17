@@ -72,7 +72,7 @@ individually while iterating:
 | 1    | `fetchTrendingTopics()` | Bluesky's trending endpoint                   |
 | 2    | `extractEntities()`     | Claude normalizes headlines into entity names |
 | 3    | `resolveFirstArticle()` | Wikipedia decides which ones are real; honours `--order` |
-| 4    | `pickImageArticle()`    | Random article with a usable lead image       |
+| 4    | `pickImageArticle()`    | Article drawn from the Top 25 Report          |
 | 5    | `postJuxtaposition()`   | Upload blob, post the card                    |
 
 Step 2 is load-bearing, not a nicety. Trending topics arrive as headline
@@ -80,6 +80,26 @@ sentences — `"Trump spends $900M on White House"`, not `"Trump"` — and none 
 them resolve to an article verbatim. Claude pulls out the candidate subjects;
 **Wikipedia**, not Claude, decides whether an article actually exists, because
 asking a model that just gets you confident-sounding invented titles.
+
+### Where the preview image comes from
+
+The image is drawn from [Wikipedia:Top 25 Report](https://en.wikipedia.org/wiki/Wikipedia:Top_25_Report),
+the weekly roundup of the most-viewed articles. The pool is every mainspace link
+on that page — the 25 articles themselves _plus_ everything linked from their
+Notes blurbs, currently ~115 articles. That approximates someone reading what
+was popular that week and following the interesting links out of it, which is
+much closer to the bug than a random article, and gives far better material:
+`Hulk`, `Brock Lesnar`, `Athena`, `Dune Part Three` rather than a Romanian
+footballer or a beetle species.
+
+The pool is shuffled, and the linked article is **excluded** from it. That
+matters more than it looks — trending-on-Bluesky and popular-on-Wikipedia
+overlap heavily, so without the exclusion the link and the image are sometimes
+the same page and there's no joke at all.
+
+If the report can't be fetched, it falls back to random articles
+(`randomArticleWithImage`) and says so in the output, so the bot keeps running
+if that page ever moves.
 
 ## Things that will bite you
 
@@ -132,8 +152,12 @@ Check the Deno default User-Agent against the media CDN before you rely on it.
 
 ## Ideas
 
-- Store previous trending topics so the image comes from _the last thing looked
-  up_, which is closer to the actual bug.
-- Random articles are mostly obscure — a village, a beetle, a footballer.
-  Sourcing the image from the most-read list would land the joke more often;
-  `pickImageArticle` is the only function that would change.
+- Store previous trending topics so the image comes from _the last thing this
+  bot looked up_, rather than what the world was reading. Closer still to the
+  actual bug.
+- The Top 25 Report is weekly. The daily
+  [most-read feed](https://en.wikipedia.org/api/rest_v1/#/Featured%20content)
+  (`/feed/featured`) would make the image track the news more tightly —
+  `fetchTop25Links` is the only function that would change.
+- Weight the pool toward the Notes links over the top-25 themselves; the
+  clicked-through-to articles are the more surprising half.
