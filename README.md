@@ -4,7 +4,7 @@
 
 # Dissociating Wikipedia Bot
 
-A bot to post Wikipedia links with mistaken preview images.
+A [bot](https://bsky.app/profile/dissociating-wiki.bsky.social) to post Wikipedia links with mistaken preview images.
 
 Inspired by a bug on my phone where the Wikipedia app loads the preview image from last article I read.
 
