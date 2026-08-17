@@ -1,6 +1,10 @@
-# ![Blurry W](./w-blurry.png) Dissociating Wikipedia Bot
+<p align="center">
+  <img alt="A Blurry W" src="./w-blurry.png" class="logo" />
+</p>
 
-A bot to post Wikipedia links with mistaken preview iamges.
+# Dissociating Wikipedia Bot
+
+A bot to post Wikipedia links with mistaken preview images.
 
 Inspired by a bug on my phone where the Wikipedia app loads the preview image from last article I read.
 
